@@ -9,7 +9,13 @@ from typing import Optional, Dict, Any
 
 import click
 
-from .config import load_config, setup_logging, ConfigError, validate_directories, Config
+from .config import (
+    load_config,
+    setup_logging,
+    ConfigError,
+    validate_directories,
+    Config,
+)
 from .transcriber import AudioTranscriber
 from .monitor import FolderMonitor
 

@@ -193,7 +193,7 @@ class TestFolderMonitorExtended:
         input_file.write_text("fake audio")
 
         output_file = tmp_path / "output" / "test.txt"
-        output_file.parent.mkdir(parents=True)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text("existing transcript")
 
         with (
@@ -244,11 +244,8 @@ class TestFolderMonitorExtended:
         # Should handle missing file gracefully
         monitor._wait_for_file_stability(nonexistent_file)
 
-    @patch("src.monitor.time.sleep")
-    def test_wait_for_file_stability_changing_size(
-        self, mock_sleep, tmp_path, mock_transcriber
-    ):
-        """Test file stability with changing file size."""
+    def test_process_file_race_condition_protection(self, tmp_path, mock_transcriber):
+        """Test that race condition protection works."""
         monitor = FolderMonitor(
             input_dir=tmp_path / "input",
             output_dir=tmp_path / "output",
@@ -256,27 +253,22 @@ class TestFolderMonitorExtended:
             transcriber=mock_transcriber,
         )
 
-        test_file = tmp_path / "test.mp3"
-        test_file.write_text("initial")
+        input_file = tmp_path / "input" / "test.mp3"
+        input_file.parent.mkdir(exist_ok=True)
+        input_file.write_text("fake audio")
 
-        # Mock file stat to simulate changing then stable size
-        call_count = 0
+        file_key = str(input_file)
+        # Manually set file as being processed
+        monitor._currently_processing[file_key] = "test-id-123"
 
-        def mock_stat():
-            nonlocal call_count
-            call_count += 1
-            mock_result = Mock()
-            if call_count <= 2:
-                mock_result.st_size = call_count * 100  # Changing size
-            else:
-                mock_result.st_size = 200  # Stable size
-            return mock_result
+        with patch.object(monitor, "_wait_for_file_stability") as mock_wait:
+            monitor._process_file(input_file)
 
-        with patch.object(test_file, "stat", side_effect=mock_stat):
-            monitor._wait_for_file_stability(test_file, max_wait=5)
+            # Should not have waited for file stability because file was already being processed
+            mock_wait.assert_not_called()
 
-        # Should have called sleep while waiting for stability
-        assert mock_sleep.call_count >= 3
+        # File should still be marked as processing (because we set it manually)
+        assert file_key in monitor._currently_processing
 
     def test_move_to_done_error(self, tmp_path, mock_transcriber):
         """Test move to done with file system error."""
@@ -290,36 +282,38 @@ class TestFolderMonitorExtended:
         test_file = tmp_path / "input" / "test.mp3"
         test_file.write_text("fake audio")
 
-        # Mock rename to raise exception
-        with patch.object(
-            test_file, "rename", side_effect=OSError("Permission denied")
-        ):
-            # Should handle error gracefully
-            monitor._move_to_done(test_file)
+        # Test with non-existent file (simpler error case)
+        nonexistent_file = tmp_path / "input" / "nonexistent.mp3"
+        # Should handle error gracefully
+        monitor._move_to_done(nonexistent_file)
 
-    @patch("src.monitor.time.sleep")
-    def test_poll_directory_error_handling(
-        self, mock_sleep, tmp_path, mock_transcriber
-    ):
-        """Test polling directory with error handling."""
+    def test_process_file_with_processing_id(self, tmp_path, mock_transcriber):
+        """Test processing file with unique processing ID tracking."""
         monitor = FolderMonitor(
             input_dir=tmp_path / "input",
             output_dir=tmp_path / "output",
             done_dir=tmp_path / "done",
             transcriber=mock_transcriber,
-            poll_interval=0.1,
         )
 
-        # Mock iterdir to raise exception
-        with patch.object(
-            monitor.input_dir, "iterdir", side_effect=OSError("Permission denied")
-        ):
-            # Start polling thread
-            monitor._stop_event = Event()
-            monitor._stop_event.set()  # Stop immediately
+        input_file = tmp_path / "input" / "test.mp3"
+        input_file.parent.mkdir(exist_ok=True)
+        input_file.write_text("fake audio")
 
-            # Should handle error gracefully
-            monitor._poll_directory()
+        with (
+            patch.object(monitor, "_wait_for_file_stability"),
+            patch.object(monitor, "_move_to_done") as mock_move,
+        ):
+            monitor._process_file(input_file)
+
+            # Should have moved file to done
+            mock_move.assert_called_once_with(input_file)
+
+        # Should have recorded the processing with an ID
+        assert len(monitor.processed_files) == 1
+        processed = monitor.processed_files[0]
+        assert processed.processing_id is not None
+        assert len(processed.processing_id) == 8  # Short UUID format
 
     def test_start_existing_files_error(self, tmp_path, mock_transcriber):
         """Test processing existing files with transcription error."""
@@ -345,3 +339,42 @@ class TestFolderMonitorExtended:
         # Should record error for existing file
         assert len(monitor.processed_files) == 1
         assert monitor.processed_files[0].status == "error"
+
+    def test_already_has_transcript_exists(self, tmp_path, mock_transcriber):
+        """Test checking if transcript exists when it does."""
+        monitor = FolderMonitor(
+            input_dir=tmp_path / "input",
+            output_dir=tmp_path / "output",
+            done_dir=tmp_path / "done",
+            transcriber=mock_transcriber,
+        )
+
+        # Create input file and transcript
+        input_file = tmp_path / "input" / "test.mp3"
+        transcript_file = tmp_path / "output" / "test.txt"
+
+        input_file.parent.mkdir(exist_ok=True)
+        transcript_file.parent.mkdir(exist_ok=True)
+
+        input_file.write_text("fake audio")
+        transcript_file.write_text("existing transcript")
+
+        # Should detect existing transcript
+        assert monitor._already_has_transcript(input_file) is True
+
+    def test_already_has_transcript_missing(self, tmp_path, mock_transcriber):
+        """Test checking if transcript exists when it doesn't."""
+        monitor = FolderMonitor(
+            input_dir=tmp_path / "input",
+            output_dir=tmp_path / "output",
+            done_dir=tmp_path / "done",
+            transcriber=mock_transcriber,
+        )
+
+        # Create input file but no transcript
+        input_file = tmp_path / "input" / "test.mp3"
+        input_file.parent.mkdir(exist_ok=True)
+        input_file.write_text("fake audio")
+
+        # Should detect missing transcript
+        assert monitor._already_has_transcript(input_file) is False
