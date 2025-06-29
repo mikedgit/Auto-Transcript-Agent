@@ -46,7 +46,7 @@ The service consists of several modular components:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/Auto-Transcript-Agent.git
+   git clone https://github.com/mikedgit/Auto-Transcript-Agent.git
    cd Auto-Transcript-Agent
    ```
 
@@ -79,7 +79,7 @@ If you prefer manual setup:
 
 1. **Clone and install dependencies:**
    ```bash
-   git clone https://github.com/your-username/Auto-Transcript-Agent.git
+   git clone https://github.com/mikedgit/Auto-Transcript-Agent.git
    cd Auto-Transcript-Agent
    uv sync
    ```
