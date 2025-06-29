@@ -97,3 +97,120 @@ The application follows a modular architecture with clear separation of concerns
 - Dataclasses for structured configuration and data models
 - Threading for concurrent operations (polling, file processing)
 - Path objects used consistently instead of string paths
+
+## Service Troubleshooting for Developers
+
+### Common LaunchAgent Issues
+
+When working on service improvements, be aware of these common pitfalls:
+
+#### 1. Duplicate Keys in plist Files
+- **Problem**: XML plist files cannot have duplicate keys (e.g., multiple `<key>KeepAlive</key>`)
+- **Symptoms**: `LastExitStatus = 19968`, service loads but never starts
+- **Prevention**: Always validate plist files with `plutil -lint`
+- **Fix**: Combine duplicate keys into single complex structure
+
+#### 2. Homebrew PATH Issues
+- **Problem**: LaunchAgent doesn't inherit user shell PATH, can't find Homebrew tools
+- **Symptoms**: "command not found" errors, service fails to start
+- **Solution**: Explicitly include `/opt/homebrew/bin` in plist EnvironmentVariables
+- **Testing**: Use `launchctl getenv PATH` to check LaunchAgent environment
+
+#### 3. Log File Permissions
+- **Problem**: LaunchAgent can't write to `/var/log/` (requires admin permissions)
+- **Symptoms**: No log files created, silent failures
+- **Solution**: Use user-accessible paths like project directory
+- **Best Practice**: Default to user directory, allow configuration override
+
+#### 4. Virtual Environment Reliability
+- **Problem**: Direct venv paths may not work reliably in LaunchAgent context
+- **Symptoms**: Python import errors, module not found errors
+- **Solution**: Use `uv run python` approach for better environment handling
+- **Testing**: Compare manual execution vs LaunchAgent execution
+
+### Debugging Workflow
+
+1. **Manual Testing First**
+   ```bash
+   # Always test manually before deploying as service
+   uv run python -m src.transcript_service run
+   ```
+
+2. **Validate plist Syntax**
+   ```bash
+   plutil -lint ~/Library/LaunchAgents/com.user.autotranscript.plist
+   ```
+
+3. **Check Service Status**
+   ```bash
+   launchctl list com.user.autotranscript
+   # Look for LastExitStatus != 0
+   ```
+
+4. **Monitor Service Logs**
+   ```bash
+   tail -f service.err.log  # Service stdout/stderr
+   tail -f auto-transcript-agent.log  # Application logs
+   ```
+
+5. **Test Network Permissions**
+   - Run manual test with network directories first
+   - Grant macOS permissions when prompted
+   - Then deploy as service
+
+### Testing Service Reliability
+
+#### Unit Tests for Service Components
+- Mock launchctl commands in tests
+- Test plist generation and validation
+- Verify log file handling logic
+- Test service status checking
+
+#### Integration Tests
+- Test full service lifecycle (install → start → test → stop → uninstall)
+- Verify file processing through service vs manual execution
+- Test with network shares and permission scenarios
+- Validate service restart behavior
+
+#### Manual Validation Checklist
+- [ ] Service installs without errors
+- [ ] Plist file validates with plutil
+- [ ] Service starts and shows in `launchctl list`
+- [ ] Log files are created and accessible
+- [ ] File processing works end-to-end
+- [ ] Service survives system restart
+- [ ] Network directory permissions work correctly
+
+### macOS Specific Considerations
+
+#### LaunchAgent vs LaunchDaemon
+- Use LaunchAgent (user-level) for user directory access
+- LaunchDaemon (system-level) has more restrictions
+- LaunchAgent requires user login to function
+
+#### Permission Model
+- Network shares require explicit user consent
+- First run should be manual to trigger permission dialogs
+- Service inherits user permissions but not environment
+
+#### Environment Variables
+- LaunchAgent gets minimal environment
+- Must explicitly set PATH, PYTHONPATH, etc.
+- Use absolute paths when possible
+
+### Code Quality for Service Components
+
+#### Error Handling
+- Always handle subprocess failures gracefully
+- Provide meaningful error messages for service issues
+- Log service lifecycle events at appropriate levels
+
+#### Configuration Validation
+- Validate all paths exist and are accessible
+- Check API keys and network connectivity
+- Verify audio format support before processing
+
+#### Resource Management
+- Set appropriate resource limits in plist
+- Monitor memory usage during long-running operations
+- Handle file descriptor limits properly

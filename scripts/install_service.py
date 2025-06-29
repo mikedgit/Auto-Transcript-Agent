@@ -29,6 +29,69 @@ def get_launch_agents_dir() -> Path:
     return launch_agents_dir
 
 
+def validate_plist_content(content: str) -> bool:
+    """
+    Validate plist content for common issues.
+    
+    Args:
+        content: The plist file content
+        
+    Returns:
+        True if valid, False if issues found
+    """
+    issues = []
+    
+    # Check for duplicate KeepAlive keys
+    keep_alive_count = content.count("<key>KeepAlive</key>")
+    if keep_alive_count > 1:
+        issues.append(f"Found {keep_alive_count} KeepAlive keys (should be 1)")
+    
+    # Check for Homebrew PATH
+    if "/opt/homebrew/bin" not in content:
+        issues.append("Missing /opt/homebrew/bin in PATH (needed for uv)")
+    
+    # Check for user-accessible log paths
+    if "/var/log/" in content:
+        issues.append("Using /var/log/ paths (may cause permission issues)")
+    
+    # Check for uv usage
+    if "/opt/homebrew/bin/uv" not in content:
+        issues.append("Not using uv run approach (less reliable)")
+    
+    if issues:
+        click.echo("⚠ Plist validation issues found:")
+        for issue in issues:
+            click.echo(f"  - {issue}")
+        return False
+    
+    return True
+
+
+def validate_plist_file(plist_path: Path) -> bool:
+    """
+    Validate an installed plist file using plutil.
+    
+    Args:
+        plist_path: Path to the plist file
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["plutil", "-lint", str(plist_path)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        click.echo("✓ Plist file syntax is valid")
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        click.echo(f"✗ Plist file syntax error: {e.stderr}")
+        return False
+
+
 def customize_plist(project_root: Path, username: str) -> str:
     """
     Read and customize the plist file with actual paths.
@@ -57,7 +120,7 @@ def customize_plist(project_root: Path, username: str) -> str:
 
 def install_plist(project_root: Path, username: str) -> Path:
     """
-    Install the LaunchAgent plist file.
+    Install the LaunchAgent plist file with validation.
     
     Args:
         project_root: Path to the project root
@@ -72,26 +135,40 @@ def install_plist(project_root: Path, username: str) -> Path:
     # Generate customized plist content
     plist_content = customize_plist(project_root, username)
     
+    # Validate plist content before installation
+    if not validate_plist_content(plist_content):
+        raise click.ClickException("Plist content validation failed")
+    
     # Write the plist file
     with open(plist_dest, 'w') as f:
         f.write(plist_content)
+    
+    # Validate the written plist file
+    if not validate_plist_file(plist_dest):
+        plist_dest.unlink()  # Remove invalid file
+        raise click.ClickException("Plist file validation failed")
     
     click.echo(f"✓ Installed plist file: {plist_dest}")
     return plist_dest
 
 
 def create_log_directory() -> None:
-    """Create log directory if it doesn't exist."""
-    log_dir = Path("/var/log")
+    """Create log directory if it doesn't exist and show network permissions warning."""
+    project_root = get_project_root()
     
-    if not log_dir.exists():
-        click.echo("⚠ /var/log directory doesn't exist, logs will go to stderr")
-        return
+    # Ensure project directory is writable for logs
+    if not os.access(project_root, os.W_OK):
+        click.echo(f"⚠ Cannot write to project directory: {project_root}")
+        click.echo("  Service logs may not be created")
+    else:
+        click.echo(f"✓ Service logs will be written to: {project_root}")
     
-    # Check if we can write to /var/log
-    if not os.access(log_dir, os.W_OK):
-        click.echo("⚠ Cannot write to /var/log, you may need to run with sudo for logging")
-        click.echo("  Or configure LOG_FILE in .env to a writable location")
+    # Show network permissions warning for macOS
+    click.echo("\n💡 Important for network directories:")
+    click.echo("  On macOS, you may need to grant network access permissions")
+    click.echo("  Run manually first if using network shares:")
+    click.echo(f"    uv run python -m src.transcript_service run")
+    click.echo("  Then grant permissions when prompted and restart the service")
 
 
 def load_service(plist_path: Path) -> bool:
@@ -339,16 +416,39 @@ def status():
         if "error" in status_info:
             click.echo(f"  Error: {status_info['error']}")
     
+    # Check for detailed service status
+    try:
+        result = subprocess.run(
+            ["launchctl", "list", "com.user.autotranscript"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        click.echo("\nDetailed service status:")
+        for line in result.stdout.strip().split('\n'):
+            if 'LastExitStatus' in line:
+                if '19968' in line:
+                    click.echo(f"  {line} ⚠ (Common startup failure)")
+                elif '0' in line:
+                    click.echo(f"  {line} ✓ (Normal exit)")
+                else:
+                    click.echo(f"  {line}")
+            else:
+                click.echo(f"  {line}")
+    except subprocess.CalledProcessError:
+        click.echo("Could not get detailed service status")
+    
     # Show recent log entries if available
+    project_root = get_project_root()
     log_files = [
-        "/var/log/auto-transcript-agent.out.log",
-        "/var/log/auto-transcript-agent.err.log"
+        project_root / "service.out.log",
+        project_root / "service.err.log",
+        project_root / "auto-transcript-agent.log"
     ]
     
-    for log_file in log_files:
-        log_path = Path(log_file)
+    for log_path in log_files:
         if log_path.exists():
-            click.echo(f"\nRecent entries from {log_file}:")
+            click.echo(f"\nRecent entries from {log_path.name}:")
             try:
                 result = subprocess.run(
                     ["tail", "-n", "5", str(log_path)],
@@ -360,7 +460,7 @@ def status():
                     if line.strip():
                         click.echo(f"  {line}")
             except subprocess.CalledProcessError:
-                click.echo(f"  Could not read {log_file}")
+                click.echo(f"  Could not read {log_path}")
 
 
 @cli.command()

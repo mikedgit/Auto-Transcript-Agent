@@ -284,38 +284,35 @@ uv run black src tests && uv run flake8 src tests && uv run mypy src
 
 ## Troubleshooting
 
-### Common Issues
+### Quick Diagnostics
 
 **Service won't start:**
-- Check that all dependencies are installed: `uv sync`
-- Verify .env file exists and contains valid configuration: `uv run python -m src.transcript_service status`
-- Check system logs: `tail -f /var/log/auto-transcript-agent.log`
-- Verify service installation: `uv run python scripts/install_service.py status`
+```bash
+# Check service status
+uv run python scripts/install_service.py status
+
+# Verify configuration
+uv run python -m src.transcript_service status
+
+# Test manually
+uv run python -m src.transcript_service run
+```
 
 **Files not being processed:**
-- Verify input directory exists and is accessible
-- Check file permissions on monitored directories
-- Ensure audio files are in supported formats (.mp3, .wav, .m4a, .flac, .aac, .ogg, .webm)
-- Review service logs for error messages with unique processing IDs
-- Check if files are already being processed (race condition protection active)
+- Verify audio file formats (.mp3, .wav, .m4a, .flac, .aac, .ogg, .webm)
+- Check input directory permissions and accessibility
+- Review logs: `tail -f auto-transcript-agent.log`
 
-**AssemblyAI API errors:**
-- Verify API key is valid and has available credits
-- Check network connectivity
-- Review rate limiting in AssemblyAI dashboard
+### Detailed Troubleshooting
 
-**Network directory issues:**
-- Ensure network share is properly mounted
-- Check that the service has read/write permissions
-- Verify network stability and connection
+For comprehensive troubleshooting including:
+- 🔧 Service startup issues and LaunchAgent problems
+- 🌐 macOS network share permissions
+- 🍺 Homebrew PATH configuration issues
+- 📊 Log analysis and debugging techniques
+- 🐛 Common error solutions
 
-### Logs
-
-Service logs are written to:
-- Console output (when running manually)
-- `/var/log/auto-transcript-agent.log` (when running as service)
-
-Log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+**See the complete guide: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
 
 ## Performance
 

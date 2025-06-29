@@ -8,12 +8,14 @@
     
     <!-- Program to run -->
     <key>Program</key>
-    <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin/python</string>
+    <string>/opt/homebrew/bin/uv</string>
     
     <!-- Program arguments -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin/python</string>
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <string>python</string>
         <string>-m</string>
         <string>src.transcript_service</string>
         <string>run</string>
@@ -27,7 +29,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/opt/homebrew/bin:/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>PYTHONPATH</key>
         <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent</string>
     </dict>
@@ -36,11 +38,7 @@
     <key>RunAtLoad</key>
     <true/>
     
-    <!-- Keep the service running -->
-    <key>KeepAlive</key>
-    <true/>
-    
-    <!-- Restart if it crashes -->
+    <!-- Keep the service running and restart if it crashes -->
     <key>KeepAlive</key>
     <dict>
         <key>SuccessfulExit</key>
@@ -55,10 +53,10 @@
     
     <!-- Standard output and error logging -->
     <key>StandardOutPath</key>
-    <string>/var/log/auto-transcript-agent.out.log</string>
+    <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/service.out.log</string>
     
     <key>StandardErrorPath</key>
-    <string>/var/log/auto-transcript-agent.err.log</string>
+    <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/service.err.log</string>
     
     <!-- Process type -->
     <key>ProcessType</key>
