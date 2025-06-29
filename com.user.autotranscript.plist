@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identification -->
+    <key>Label</key>
+    <string>com.user.autotranscript</string>
+    
+    <!-- Program to run -->
+    <key>Program</key>
+    <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin/python</string>
+    
+    <!-- Program arguments -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin/python</string>
+        <string>-m</string>
+        <string>src.transcript_service</string>
+        <string>run</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/REPLACE_WITH_USERNAME/Custom-Agents/Auto-Transcript-Agent</string>
+    </dict>
+    
+    <!-- Automatically start the service -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Keep the service running -->
+    <key>KeepAlive</key>
+    <true/>
+    
+    <!-- Restart if it crashes -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    
+    <!-- Throttle restart attempts -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    
+    <!-- Standard output and error logging -->
+    <key>StandardOutPath</key>
+    <string>/var/log/auto-transcript-agent.out.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/var/log/auto-transcript-agent.err.log</string>
+    
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <!-- Nice value (lower priority) -->
+    <key>Nice</key>
+    <integer>5</integer>
+    
+    <!-- Resource limits -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <!-- Memory limit: 512MB -->
+        <key>ResidentSetSize</key>
+        <integer>536870912</integer>
+        <!-- CPU time limit: 1 hour -->
+        <key>CPU</key>
+        <integer>3600</integer>
+    </dict>
+    
+    <!-- Hard resource limits -->
+    <key>HardResourceLimits</key>
+    <dict>
+        <!-- Memory limit: 1GB -->
+        <key>ResidentSetSize</key>
+        <integer>1073741824</integer>
+        <!-- CPU time limit: 2 hours -->
+        <key>CPU</key>
+        <integer>7200</integer>
+    </dict>
+    
+    <!-- Disable at console login (run only when logged in) -->
+    <key>LimitLoadToSessionType</key>
+    <array>
+        <string>Aqua</string>
+    </array>
+    
+    <!-- Service description -->
+    <key>ServiceDescription</key>
+    <string>Auto-Transcript-Agent: Monitors folders for audio files and converts them to text transcripts using AssemblyAI</string>
+</dict>
+</plist>
