@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Dict, Any
 
-import assemblyai as aai
+import assemblyai as aai  # type: ignore
 from assemblyai import TranscriptError, TranscriptionConfig, SpeechModel
 
 logger = logging.getLogger(__name__)
@@ -135,7 +135,9 @@ class AudioTranscriber:
                 time.sleep(self.retry_delay)
 
         # This should never be reached due to the raise statements above
-        raise TranscriberError(f"Transcription failed after {self.max_retries} attempts")
+        raise TranscriberError(
+            f"Transcription failed after {self.max_retries} attempts"
+        )
 
     def get_transcription_info(self, file_path: Path) -> Dict[str, Any]:
         """

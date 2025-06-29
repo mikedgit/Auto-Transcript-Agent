@@ -130,7 +130,7 @@ class FolderMonitor:
 
         # Track processed files
         self.processed_files: List[ProcessedFile] = []
-        
+
         # File processing protection
         self._processing_lock = Lock()
         self._currently_processing: Dict[str, str] = {}  # file_path -> processing_id
@@ -197,14 +197,18 @@ class FolderMonitor:
             try:
                 # Check for new files
                 for file_path in self.input_dir.iterdir():
-                    if (
-                        file_path.is_file()
-                        and self.transcriber.is_supported_file(file_path)
-                        and not self._is_recently_processed(file_path)
+                    if file_path.is_file() and self.transcriber.is_supported_file(
+                        file_path
                     ):
+                        # If transcript doesn't exist, process the file (even if recently processed)
+                        # If transcript exists, only process if not recently processed
+                        transcript_exists = self._already_has_transcript(file_path)
+                        recently_processed = self._is_recently_processed(file_path)
 
-                        logger.debug(f"Polling detected file: {file_path}")
-                        self._process_file(file_path)
+                        should_process = not transcript_exists or not recently_processed
+                        if should_process:
+                            logger.debug(f"Polling detected file: {file_path}")
+                            self._process_file(file_path)
 
             except Exception as e:
                 logger.error(f"Error during directory polling: {e}")
@@ -222,8 +226,9 @@ class FolderMonitor:
         Returns:
             True if file was recently processed, False otherwise
         """
-        # Consider a file recently processed if it was processed in the last hour
-        recent_threshold = time.time() - 3600
+        # Consider a file recently processed if it was processed in the last 5 minutes
+        # This allows for quick testing while preventing immediate duplicate processing
+        recent_threshold = time.time() - 300
 
         for processed_file in self.processed_files:
             if (
@@ -234,6 +239,19 @@ class FolderMonitor:
 
         return False
 
+    def _already_has_transcript(self, file_path: Path) -> bool:
+        """
+        Check if a transcript already exists for this audio file.
+
+        Args:
+            file_path: Path to the audio file
+
+        Returns:
+            True if transcript exists, False otherwise
+        """
+        transcript_path = self.output_dir / f"{file_path.stem}.txt"
+        return transcript_path.exists()
+
     def _process_file(self, file_path: Path) -> None:
         """
         Process a single audio file with race condition protection.
@@ -243,14 +261,16 @@ class FolderMonitor:
         """
         file_key = str(file_path)
         processing_id = str(uuid.uuid4())[:8]  # Short unique ID
-        
+
         # Check if already being processed (race condition protection)
         with self._processing_lock:
             if file_key in self._currently_processing:
                 existing_id = self._currently_processing[file_key]
-                logger.info(f"File already being processed by {existing_id}, skipping: {file_path.name}")
+                logger.info(
+                    f"File already being processed by {existing_id}, skipping: {file_path.name}"
+                )
                 return
-            
+
             # Mark as being processed
             self._currently_processing[file_key] = processing_id
 
@@ -270,7 +290,9 @@ class FolderMonitor:
 
             # Check if transcript already exists
             if output_path.exists():
-                logger.info(f"[{processing_id}] Transcript already exists, skipping: {output_path}")
+                logger.info(
+                    f"[{processing_id}] Transcript already exists, skipping: {output_path}"
+                )
                 self._move_to_done(file_path)
                 self._record_processed_file(
                     file_path, "skipped", "Transcript already exists", processing_id
@@ -340,7 +362,9 @@ class FolderMonitor:
         try:
             # Check if source file still exists
             if not file_path.exists():
-                logger.warning(f"Source file no longer exists, may have been moved already: {file_path.name}")
+                logger.warning(
+                    f"Source file no longer exists, may have been moved already: {file_path.name}"
+                )
                 return
 
             done_path = self.done_dir / file_path.name
@@ -365,7 +389,11 @@ class FolderMonitor:
             logger.error(f"Failed to move file to done directory: {e}")
 
     def _record_processed_file(
-        self, file_path: Path, status: str, error_message: Optional[str] = None, processing_id: Optional[str] = None
+        self,
+        file_path: Path,
+        status: str,
+        error_message: Optional[str] = None,
+        processing_id: Optional[str] = None,
     ) -> None:
         """
         Record information about a processed file.
